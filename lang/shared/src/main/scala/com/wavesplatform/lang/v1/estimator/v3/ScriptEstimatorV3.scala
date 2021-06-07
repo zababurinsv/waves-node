@@ -120,7 +120,7 @@ object ScriptEstimatorV3 extends ScriptEstimator {
       header match {
         case Native(id) =>
           val version = DirectiveDictionary[StdLibVersion].all.last
-          getDecompilerContext(version, Expression).opCodes.getOrElse(id, header)
+          getDecompilerContext(version, Expression).opCodes.getOrElse(id, header.toString)
         case u: User =>
           u.name
       }
