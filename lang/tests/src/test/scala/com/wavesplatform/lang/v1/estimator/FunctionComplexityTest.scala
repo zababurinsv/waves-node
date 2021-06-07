@@ -1,12 +1,12 @@
 package com.wavesplatform.lang.v1.estimator
+
 import com.wavesplatform.DocSource
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.lang.Common.NoShrink
-import com.wavesplatform.lang.directives.{DirectiveDictionary, DirectiveSet}
 import com.wavesplatform.lang.directives.values._
+import com.wavesplatform.lang.directives.{DirectiveDictionary, DirectiveSet}
 import com.wavesplatform.lang.utils._
-import com.wavesplatform.lang.v1.compiler.Terms
-import com.wavesplatform.lang.v1.compiler.Terms.FUNCTION_CALL
+import com.wavesplatform.lang.v1.compiler.Terms.{CONST_STRING, FUNCTION_CALL}
 import com.wavesplatform.lang.v1.estimator.v3.ScriptEstimatorV3
 import com.wavesplatform.lang.v1.evaluator.ctx.BaseFunction
 import com.wavesplatform.lang.v1.traits.Environment
@@ -16,7 +16,7 @@ import org.scalatestplus.scalacheck.{ScalaCheckPropertyChecks => PropertyChecks}
 
 class FunctionComplexityTest extends PropSpec with PropertyChecks with Matchers with NoShrink {
   val directives: Iterable[DirectiveSet] =
-  DirectiveDictionary[StdLibVersion].all
+    DirectiveDictionary[StdLibVersion].all
       .flatMap(
         version =>
           Seq(
@@ -39,17 +39,19 @@ class FunctionComplexityTest extends PropSpec with PropertyChecks with Matchers 
       ._3
 
   property("all functions complexities") {
+    val arg = CONST_STRING("throw").explicitGet()
     directives.foreach { ds =>
       val ctx = lazyContexts(ds).value()
       ctx.functions
         .filterNot(_.name.startsWith("_"))
         .foreach { function =>
-          val expr = FUNCTION_CALL(function.header, List.fill(function.args.size)(Terms.TRUE))
+          val expr              = FUNCTION_CALL(function.header, List.fill(function.args.size)(arg))
+          val internalCallsCost = HighOrderFunctionInfo.all.get(function.header).map(_.callLimit).getOrElse(0)
           val estimatedCost = ScriptEstimatorV3(
             varNames(ds.stdLibVersion, ds.contentType),
             functionCosts(ds.stdLibVersion, ds.contentType),
             expr
-          ).explicitGet() - function.args.size
+          ).explicitGet() - function.args.size - internalCallsCost
 
           val expectedCost = docCost(function, ds.stdLibVersion)
 
