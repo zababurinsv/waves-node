@@ -80,8 +80,8 @@ object WavesContext {
       isDataStorageUntouchedF
     ) ++ (if (contentType == DApp)
             Array(
-              callDAppF(version, reentrant = false),
-              callDAppF(version, reentrant = true)
+              callDAppF(reentrant = false),
+              callDAppF(reentrant = true)
             )
           else Array())
 

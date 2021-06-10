@@ -1,17 +1,22 @@
 package com.wavesplatform.lang.v1.evaluator
 
+import cats.data.EitherT
 import cats.implicits._
 import cats.{Eval, Id, Monad, StackSafeMonad}
 import com.wavesplatform.lang.v1.FunctionHeader
+import com.wavesplatform.lang.v1.FunctionHeader.User
 import com.wavesplatform.lang.v1.compiler.Terms._
-import com.wavesplatform.lang.v1.compiler.Types.{NOTHING, CASETYPEREF}
+import com.wavesplatform.lang.v1.compiler.Types.{CASETYPEREF, NOTHING}
+import com.wavesplatform.lang.v1.evaluator.ContextfulNativeFunction.{Extended, Simple}
 import com.wavesplatform.lang.v1.evaluator.ctx.LoggedEvaluationContext.Lenses
 import com.wavesplatform.lang.v1.evaluator.ctx._
 import com.wavesplatform.lang.v1.task.imports._
 import com.wavesplatform.lang.v1.traits.Environment
-import com.wavesplatform.lang.{EvalF, ExecutionError}
+import com.wavesplatform.lang.{CoevalF, EvalF, ExecutionError}
+import monix.eval.Coeval
 
 import scala.collection.mutable.ListBuffer
+import scala.util.Try
 
 object EvaluatorV1 {
   implicit val idEvalFMonad: Monad[EvalF[Id, ?]] = new StackSafeMonad[EvalF[Id, ?]] {
@@ -26,7 +31,7 @@ object EvaluatorV1 {
   def apply(): EvaluatorV1[Id, Environment] = evaluator
 }
 
-class EvaluatorV1[F[_] : Monad, C[_[_]]](implicit ev: Monad[EvalF[F, ?]]) {
+class EvaluatorV1[F[_] : Monad, C[_[_]]](implicit ev: Monad[EvalF[F, ?]], ev2: Monad[CoevalF[F, ?]]) {
   private val lenses = new Lenses[F, C]
   import lenses._
 
@@ -96,16 +101,28 @@ class EvaluatorV1[F[_] : Monad, C[_[_]]](implicit ev: Monad[EvalF[F, ?]]) {
               }
             }: EvalM[F, C, EVALUATED]
           case func: NativeFunction[C] =>
-            Monad[EvalM[F, C, ?]].flatMap(args.traverse(evalExpr))(args =>
-              liftTER[F, C, EVALUATED](func.eval[F](ctx.ec.environment, args).value)
-            )
+            Monad[EvalM[F, C, ?]].flatMap(args.traverse(evalExpr)) { args =>
+              val evaluated = func.ev match {
+                case f: Simple[C]   =>
+                  val r = Try(f.evaluate(ctx.ec.environment, args))
+                    .toEither
+                    .leftMap(_.toString)
+                    .pure[F]
+                  Eval.now(EitherT(r).map(EitherT(_)).flatten.value)
+                case f: Extended[C] =>
+                  f.evaluate(ctx.ec.environment, args, Int.MaxValue, evaluateHighOrder(ctx, _, _, _))
+                    .map(_.map(_._1))
+                    .to[Eval]
+              }
+              liftTER[F, C, EVALUATED](evaluated)
+            }
         }
         .orElse(
           // no such function, try data constructor
           header match {
             case FunctionHeader.User(typeName, _) =>
               types.get(ctx).get(typeName).collect {
-                case t @ CASETYPEREF(_, fields, hidden) =>
+                case t @ CASETYPEREF(_, fields, _) =>
                   args
                     .traverse[EvalM[F, C, ?], EVALUATED](evalExpr)
                     .map(values => CaseObj(t, fields.map(_._1).zip(values).toMap): EVALUATED)
@@ -115,6 +132,18 @@ class EvaluatorV1[F[_] : Monad, C[_[_]]](implicit ev: Monad[EvalF[F, ?]]) {
         )
         .getOrElse(raiseError[F, LoggedEvaluationContext[C, F], ExecutionError, EVALUATED](s"function '$header' not found"))
     } yield (ctx.ec, result)
+
+  private def evaluateHighOrder(
+    ctx: LoggedEvaluationContext[C, F],
+    function: String,
+    args: List[EVALUATED],
+    limit: Int
+  ): Coeval[F[(Either[ExecutionError, EVALUATED], Int)]] =
+    Coeval.from(
+      evalExpr(FUNCTION_CALL(User(function), args))
+        .run(ctx)
+        .map { case (_, r) => r.map((_, 0)) }
+    )
 
   private def evalExprWithCtx(t: EXPR): EvalM[F, C, (EvaluationContext[C, F], EVALUATED)] =
     t match {
