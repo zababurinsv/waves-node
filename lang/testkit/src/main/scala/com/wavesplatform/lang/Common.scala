@@ -21,6 +21,7 @@ import com.wavesplatform.lang.script.Script
 import monix.eval.Coeval
 import org.scalacheck.ShrinkLowPriority
 
+import scala.annotation.tailrec
 import scala.util.{Left, Right, Try}
 
 object Common {
@@ -126,4 +127,10 @@ object Common {
         else Right(None)
     }
   }
+
+  @tailrec def fold(totalSize: Int, list: String, acc: String, f: String)(size: Int = totalSize): String =
+    if (size == 0)
+      acc
+    else
+      fold(totalSize, list, s"$f($acc, $list[${totalSize - size}])", f)(size - 1)
 }

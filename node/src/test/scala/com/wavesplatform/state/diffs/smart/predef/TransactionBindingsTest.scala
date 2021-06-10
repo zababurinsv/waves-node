@@ -5,7 +5,7 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.state.diffs.ProduceError._
 import com.wavesplatform.common.utils.{Base58, EitherExt2}
 import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.lang.Global
+import com.wavesplatform.lang.{Common, Global}
 import com.wavesplatform.lang.Testing.evaluated
 import com.wavesplatform.lang.directives.values._
 import com.wavesplatform.lang.directives.{DirectiveDictionary, DirectiveSet}
@@ -32,6 +32,8 @@ import org.scalatest.{EitherValues, Matchers, PropSpec}
 import org.scalatestplus.scalacheck.{ScalaCheckPropertyChecks => PropertyChecks}
 import play.api.libs.json.Json
 import shapeless.Coproduct
+
+import scala.annotation.tailrec
 
 class TransactionBindingsTest
     extends PropSpec
@@ -355,6 +357,7 @@ class TransactionBindingsTest
         .reverse
         .mkString("[", ",", "]")
 
+      val size = t.payments.size
       val script =
         s"""
            | func assetsAmountSum(acc: Int, p: AttachedPayment) = acc + p.amount
@@ -366,8 +369,8 @@ class TransactionBindingsTest
            |
            | match tx {
            |   case t : InvokeScriptTransaction =>
-           |     let paymentAmount = FOLD<${t.payments.size}>(t.payments, 0, assetsAmountSum) == ${t.payments.map(_.amount).sum}
-           |     let paymentAssets = FOLD<${t.payments.size}>(t.payments, nil, extractAssets) == $paymentsStr
+           |     let paymentAmount = ${Common.fold(size, "t.payments", "0", "assetsAmountSum")()} == ${t.payments.map(_.amount).sum}
+           |     let paymentAssets = ${Common.fold(size, "t.payments", "nil", "extractAssets")()} == $paymentsStr
            |
            |     paymentAmount && paymentAssets
            |
