@@ -1791,5 +1791,6 @@ object PureContext {
       case V3                             => v3CtxUnfixed
       case V4                             => v4CtxUnfixed
       case V5                             => v5Ctx
+      case V6                             => v5Ctx
     }
 }
