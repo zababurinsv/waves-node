@@ -77,7 +77,7 @@ lazy val `lang-doc` = project
 lazy val node = project.dependsOn(`lang-jvm`, `lang-testkit` % "test")
 
 lazy val `grpc-server`    = project.dependsOn(node % "compile;test->test;runtime->provided")
-lazy val `node-it`        = project.dependsOn(node, `grpc-server`)
+lazy val `node-it`        = project.dependsOn(node % "compile;test->test", `grpc-server`)
 lazy val `node-generator` = project.dependsOn(node, `node` % "compile")
 lazy val benchmark        = project.dependsOn(node % "compile;test->test")
 
