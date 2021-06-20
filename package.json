@@ -1,0 +1,13 @@
+{
+  "name": "node",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "config": {
+    "AccountId": "12D3KooWDmPRpFHuPyGTXbwZDxUgnqfw2jFw75Xe7oE92CdF6wym",
+    "telemetry-url": "wss://localhost:3000/submit/ 0"
+  },
+  "scripts": { },
+  "author": "Zababurin Sergey",
+  "license": "GPL-3.0-or-later"
+}
